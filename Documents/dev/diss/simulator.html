@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>調性感度モデル S_K(t) シミュレーター</title>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- KaTeX for Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 20px; background-color: #f8f9fa; color: #333; }
+        .container { max-width: 1100px; margin: 0 auto; background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        h1 { font-size: 1.5rem; border-bottom: 2px solid #007bff; padding-bottom: 8px; margin-top: 0; }
+        .math-box { background: #eef2f7; padding: 15px; border-radius: 6px; margin-bottom: 20px; font-size: 0.95rem; overflow-x: auto; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .control-group { margin-bottom: 12px; }
+        label { display: inline-block; width: 140px; font-weight: bold; font-size: 0.9rem; }
+        input[type="range"] { width: 180px; vertical-align: middle; }
+        input[type="number"], input[type="text"] { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="text"] { width: 100%; box-sizing: border-box; font-family: monospace; }
+        .val-disp { display: inline-block; width: 50px; text-align: right; font-family: monospace; font-size: 0.9rem; }
+        .chart-container { position: relative; height: 450px; margin-top: 20px; }
+        .preset-btn { background: #007bff; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-bottom: 10px; }
+        .preset-btn:hover { background: #0056b3; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>調性感度モデル $S_K(t)$ 可視化Webアプリ</h1>
+
+    <div class="math-box" id="math-display">
+        $$	ext{(1)} \quad S_K(t) = \mu S_K(t-1) + \kappa \cdot F_K(\mathbf{x}_t) \cdot A_K(F_K(t)) \cdot \left( 1 + \lambda \max(0, \delta c_K(\mathbf{x}_t)) ight)$$
+        $$	ext{(2)} \quad S_K(t) = \mu S_K(t-1) + \kappa \cdot F_K(\mathbf{x}_t)$$
+        $$	ext{where} \quad A_K(F_K(t)) = rac{1}{1 + e^{-eta (F_K(\mathbf{x}_t) - 	heta)}}, \quad \delta c_K(\mathbf{x}_t) = F_K(\mathbf{x}_t) - F_K(\mathbf{x}_{t-1})$$
+    </div>
+
+    <div class="grid">
+        <div>
+            <h3>パラメータ設定</h3>
+            <div class="control-group">
+                <label>モデル選択:</label>
+                <input type="radio" id="m1" name="model" value="1" checked onchange="update()"> <label for="m1" style="width:auto;">モデル (1)</label>
+                <input type="radio" id="m2" name="model" value="2" onchange="update()"> <label for="m2" style="width:auto;">モデル (2)</label>
+            </div>
+            <div class="control-group">
+                <label>$\mu$ (減衰/保持):</label>
+                <input type="range" id="mu" min="0" max="1" step="0.01" value="0.7" oninput="sync('mu')">
+                <span id="mu_val" class="val-disp">0.70</span>
+            </div>
+            <div class="control-group">
+                <label>$\kappa$ (入力ゲイン):</label>
+                <input type="range" id="kappa" min="0" max="3" step="0.05" value="1.0" oninput="sync('kappa')">
+                <span id="kappa_val" class="val-disp">1.00</span>
+            </div>
+            <div class="control-group">
+                <label>$\lambda$ (変化量強調):</label>
+                <input type="range" id="lambda" min="0" max="5" step="0.1" value="1.5" oninput="sync('lambda')">
+                <span id="lambda_val" class="val-disp">1.50</span>
+            </div>
+            <div class="control-group">
+                <label>$eta$ (シグモイド傾き):</label>
+                <input type="range" id="beta" min="1" max="30" step="0.5" value="10.0" oninput="sync('beta')">
+                <span id="beta_val" class="val-disp">10.0</span>
+            </div>
+            <div class="control-group">
+                <label>$	heta$ (シグモイド閾値):</label>
+                <input type="range" id="theta" min="0" max="1" step="0.05" value="0.5" oninput="sync('theta')">
+                <span id="theta_val" class="val-disp">0.50</span>
+            </div>
+            <div class="control-group">
+                <label>$n$ (音数デフォルト):</label>
+                <input type="number" id="n_val" min="1" max="10" value="5" oninput="update()">
+            </div>
+        </div>
+
+        <div>
+            <h3>音名列入力 $\mathbf{x}$</h3>
+            <button class="preset-btn" onclick="loadPreset()">プリセットを読み込む</button>
+            <p style="font-size: 0.8rem; color: #666; margin-top: 0;">
+                和音間はセミコロン <code>;</code> 、和音内構成音はカンマ <code>,</code> で区切ります。<br>
+                例: <code>f,ab,c; db,f,ab; eb,g,bb</code> (オクターブ表記 <code>c4</code> 等も可)
+            </p>
+            <textarea id="x_input" rows="6" style="width:100%; font-family:monospace; padding:8px;" oninput="update()"></textarea>
+        </div>
+    </div>
+
+    <div class="chart-container">
+        <canvas id="myChart"></canvas>
+    </div>
+</div>
+
+<script>
+// 12調の定義 (C Major = 0, C# = 1, ... B = 11)
+const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const KEY_COLORS = [
+    "#e6194B", "#3cb44b", "#ffe119", "#4363d8", "#f58231", "#911eb4",
+    "#42d4f4", "#f032e6", "#bfef45", "#fabed4", "#469990", "#dcbeff"
+];
+
+// メジャースケールの構成音（半音オフセット）
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+
+// 音名 -> Pitch Class (0~11) 変換
+function noteToPitchClass(noteStr) {
+    let clean = noteStr.trim().toLowerCase().replace(/[0-9]/g, ''); // オクターブ数字除去
+    const map = {
+        'c':0, 'c#':1, 'db':1, 'd':2, 'd#':3, 'eb':3, 'e':4, 'e#':5, 'fb':4,
+        'f':5, 'f#':6, 'gb':6, 'g':7, 'g#':8, 'ab':8, 'a':9, 'a#':10, 'bb':10, 'b':11, 'b#':0, 'cb':11
+    };
+    return map[clean] !== undefined ? map[clean] : null;
+}
+
+let chart = null;
+
+function initChart() {
+    const ctx = document.getElementById('myChart').getContext('2d');
+    chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [] },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: '時刻 t (1 ~ T+1)' } },
+                y: { title: { display: true, text: 'S_K(t)' }, beginAtZero: true }
+            },
+            plugins: {
+                legend: { position: 'right' },
+                tooltip: { mode: 'index', intersect: false }
+            }
+        }
+    });
+}
+
+function sync(id) {
+    document.getElementById(id + '_val').innerText = parseFloat(document.getElementById(id).value).toFixed(2);
+    update();
+}
+
+function loadPreset() {
+    document.getElementById('x_input').value = "f,ab,c;db,f,ab;eb,g,bb;ab,c,eb;f,ab,c;f#,a,c#;d,f#,a;e,g#,b;a,c#,e;f#,a,c#;";
+    update();
+}
+
+function calculate() {
+    const mu = parseFloat(document.getElementById('mu').value);
+    const kappa = parseFloat(document.getElementById('kappa').value);
+    const lambda = parseFloat(document.getElementById('lambda').value);
+    const beta = parseFloat(document.getElementById('beta').value);
+    const theta = parseFloat(document.getElementById('theta').value);
+    const defaultN = parseInt(document.getElementById('n_val').value) || 5;
+    const modelType = document.querySelector('input[name="model"]:checked').value;
+
+    const rawInput = document.getElementById('x_input').value;
+    const chordStrs = rawInput.split(';').map(s => s.trim()).filter(s => s.length > 0);
+
+    const T = chordStrs.length;
+    if (T === 0) return { labels: [], datasets: [] };
+
+    // 時系列データ解析: x_t [t][n]
+    const x_seq = chordStrs.map(chordStr => {
+        const notes = chordStr.split(',').map(s => noteToPitchClass(s)).filter(p => p !== null);
+        return notes;
+    });
+
+    // グラフ横軸: t = 1 ~ T+1
+    const labels = Array.from({length: T}, (_, i) => i + 1);
+
+    // 12調の計算
+    const datasets = KEYS.map((keyName, kIndex) => {
+        let S_prev = 0; // S_K(0) = 0
+        let c_prev = 0; // c_K(x_{-1}) = 0
+        const S_values = [];
+
+        for (let t = 0; t < T; t++) {
+            const chord = x_seq[t];
+            const N = chord.length > 0 ? chord.length : defaultN;
+
+            // F_K(x_t) の計算
+            let matchCount = 0;
+            chord.forEach(pitch => {
+                const isDiatonic = MAJOR_SCALE.map(deg => (kIndex + deg) % 12).includes(pitch);
+                if (isDiatonic) matchCount++;
+            });
+            const F_K = N > 0 ? matchCount / N : 0;
+
+            let S_curr = 0;
+            if (modelType === "1") {
+                // A_K(F_K)
+                const A_K = 1 / (1 + Math.exp(-beta * (F_K - theta)));
+                // delta c_K
+                const delta_c = F_K - c_prev;
+                const gain = 1 + lambda * Math.max(0, delta_c);
+
+                S_curr = mu * S_prev + kappa * F_K * A_K * gain;
+            } else {
+                // モデル (2)
+                S_curr = mu * S_prev + kappa * F_K;
+            }
+
+            S_values.push(S_curr);
+            S_prev = S_curr;
+            c_prev = F_K;
+        }
+
+        return {
+            label: keyName + " Major",
+            data: S_values,
+            borderColor: KEY_COLORS[kIndex],
+            backgroundColor: KEY_COLORS[kIndex],
+            borderWidth: 2,
+            tension: 0.2,
+            pointRadius: 3
+        };
+    });
+
+    return { labels, datasets };
+}
+
+function update() {
+    if (!chart) return;
+    const { labels, datasets } = calculate();
+    chart.data.labels = labels;
+    chart.data.datasets = datasets;
+    chart.update();
+}
+
+window.onload = () => {
+    renderMathInElement(document.getElementById('math-display'));
+    initChart();
+    loadPreset();
+};
+</script>
+
+</body>
+</html>
