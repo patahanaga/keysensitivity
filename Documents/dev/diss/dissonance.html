@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>関数 d(f, g) リアルタイム解析ツール</title>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: #1e293b;
+    }
+
+    /* タブ切り替えバー */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      border-bottom: 2px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .tab-btn {
+      padding: 6px 16px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      background: #e2e8f0;
+      color: #475569;
+      border: none;
+      border-top-left-radius: 6px;
+      border-top-right-radius: 6px;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    /* コントロールエリア */
+    .controls-container {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      flex-shrink: 0;
+    }
+
+    .n-control-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      padding: 6px 12px;
+      border-radius: 8px;
+      width: fit-content;
+    }
+
+    .n-control-row label {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--primary-dark);
+      white-space: nowrap;
+    }
+
+    .n-stepper {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-step {
+      background: var(--primary);
+      color: white;
+      border: none;
+      width: 26px;
+      height: 26px;
+      border-radius: 4px;
+      font-weight: bold;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .btn-step:hover { background: var(--primary-dark); }
+
+    .n-input-num {
+      width: 44px;
+      height: 26px;
+      text-align: center;
+      font-size: 0.88rem;
+      font-weight: 700;
+      color: var(--primary-dark);
+      border: 1px solid #93c5fd;
+      border-radius: 4px;
+    }
+
+    .action-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: var(--primary);
+      color: white;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--primary-dark); }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:hover { background: #475569; }
+    .btn-outline { background: transparent; color: #475569; border: 1px solid #cbd5e1; }
+    .btn-outline:hover { background: #f1f5f9; }
+
+    .tab-content {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .tab-content.active {
+      display: flex;
+    }
+
+    /* 2音間モードペアリスト */
+    .pairs-wrapper {
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fafafa;
+    }
+
+    .pairs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 6px;
+    }
+
+    .pair-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: white;
+      padding: 4px 6px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      font-size: 0.8rem;
+    }
+
+    .pair-item input[type="text"] {
+      width: 38px;
+      padding: 2px;
+      border: 1px solid #cbd5e1;
+      border-radius: 3px;
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    .pair-item .res-val {
+      margin-left: auto;
+      font-weight: 700;
+      color: #334155;
+      font-size: 0.75rem;
+    }
+
+    .btn-del {
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      width: 18px;
+      height: 18px;
+      line-height: 16px;
+      text-align: center;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    /* 複数音（比較セット）リスト */
+    .sets-wrapper {
+      max-height: 130px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      padding: 6px;
+      background: #fafafa;
+    }
+
+    .set-item-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      padding: 4px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .set-item-row input[type="text"] {
+      padding: 2px 6px;
+      font-size: 0.8rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+    }
+
+    .preset-select {
+      padding: 4px 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      background-color: #fff;
+    }
+
+    .set-res-split {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+
+    /* 詳細設定 */
+    details {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+    summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .params-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .params-grid input {
+      width: 100%;
+      padding: 2px 4px;
+      font-size: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+
+    /* 下部コンテンツ分割 */
+    .bottom-container {
+      display: flex;
+      gap: 12px;
+      flex: 1;
+    }
+
+    .graph-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .chart-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      min-height: 260px;
+    }
+
+    .graph-header {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      width: 100%;
+      height: 210px;
+    }
+
+    /* 内訳表示サイドパネル */
+    .breakdown-panel {
+      width: 260px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      flex-shrink: 0;
+      max-height: 540px;
+    }
+
+    .breakdown-title {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #334155;
+      border-bottom: 1px solid #e2e8f0;
+      padding-bottom: 4px;
+    }
+
+    .breakdown-list {
+      flex: 1;
+      overflow-y: auto;
+      font-size: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .set-breakdown-group {
+      border: 1px solid #cbd5e1;
+      border-radius: 5px;
+      padding: 4px 6px;
+      background: #f8fafc;
+    }
+
+    .set-breakdown-header {
+      font-weight: 700;
+      color: var(--primary-dark);
+      margin-bottom: 3px;
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed #cbd5e1;
+      padding-bottom: 2px;
+    }
+
+    .breakdown-section-title {
+      font-weight: 700;
+      font-size: 0.72rem;
+      margin-top: 4px;
+      margin-bottom: 2px;
+      padding: 1px 3px;
+      border-radius: 3px;
+    }
+    .breakdown-section-title.zx { background: #dbeafe; color: #1e40af; }
+    .breakdown-section-title.xx { background: #d1fae5; color: #065f46; }
+
+    .breakdown-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-size: 0.72rem;
+    }
+
+    .breakdown-item.center-pair { background: #eff6ff; color: #1e40af; }
+    .breakdown-item.pair-xx { background: #f0fdf4; color: #065f46; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎵 関数 d(f, g) リアルタイム解析ツール</h1>
+</header>
+
+<!-- タブ切り替え -->
+<div class="tab-bar">
+  <button class="tab-btn" id="tab-2notes">2音間モード</button>
+  <button class="tab-btn active" id="tab-mnotes">複数セット比較（n音間）モード</button>
+</div>
+
+<!-- 上部：コントロールパネル -->
+<div class="controls-container">
+  
+  <!-- 倍音数 n 操作行 -->
+  <div class="n-control-row">
+    <label for="input-n-num">倍音数 n:</label>
+    <div class="n-stepper">
+      <button class="btn-step" id="btn-n-down">−</button>
+      <input type="number" id="input-n-num" class="n-input-num" value="5" min="1" max="30">
+      <button class="btn-step" id="btn-n-up">＋</button>
+    </div>
+  </div>
+
+  <!-- タブ 1: 2音間モード -->
+  <div id="content-2notes" class="tab-content">
+    <div class="action-row">
+      <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">プリセット:</span>
+      <button class="btn btn-secondary" id="btn-preset-chromatic">半音階 (c'-c' 〜 c'-b')</button>
+      <button class="btn btn-secondary" id="btn-preset-triad">和音構成音 (C, E, G, B, C)</button>
+      <button class="btn btn-outline" id="btn-add-pair">＋ ペア追加</button>
+      <button class="btn btn-outline" id="btn-clear-pairs" style="margin-left: auto;">クリア</button>
+    </div>
+
+    <div class="pairs-wrapper">
+      <div class="pairs-grid" id="pairs-container"></div>
+    </div>
+  </div>
+
+  <!-- タブ 2: 複数セット比較モード -->
+  <div id="content-mnotes" class="tab-content active">
+    <div class="action-row">
+      <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">一括プリセット:</span>
+      <button class="btn btn-secondary" id="btn-preset-diatonic">C Major ダイアトニック (Z=C)</button>
+      <span style="border-left: 1px solid #cbd5e1; height: 16px; margin: 0 4px;"></span>
+      <span style="font-size: 0.8rem; font-weight: 700; color: #475569;">単一コード追加:</span>
+      <select id="preset-root" class="preset-select">
+        <option value="c'">C</option><option value="c#'">C# / Db</option>
+        <option value="d'">D</option><option value="d#'">D# / Eb</option>
+        <option value="e'">E</option><option value="f'">F</option>
+        <option value="f#'">F# / Gb</option><option value="g'">G</option>
+        <option value="g#'">G# / Ab</option><option value="a'">A</option>
+        <option value="a#'">A# / Bb</option><option value="b'">B</option>
+      </select>
+      <select id="preset-type" class="preset-select">
+        <option value="maj">maj (メジャー)</option>
+        <option value="min">マイナー (min)</option>
+        <option value="dim">dim (ディミニッシュ)</option>
+        <option value="aug">aug (オーグメント)</option>
+      </select>
+      <button class="btn btn-secondary" id="btn-add-preset-set">＋ セット追加</button>
+      <button class="btn btn-outline" id="btn-add-empty-set">＋ 空セット</button>
+      <button class="btn btn-outline" id="btn-clear-sets" style="margin-left: auto;">全削除</button>
+    </div>
+
+    <div class="sets-wrapper" id="sets-container"></div>
+  </div>
+
+  <!-- 定数設定 -->
+  <details>
+    <summary>詳細定数設定 (A4=440Hz / α, β, ν)</summary>
+    <div class="params-grid">
+      <div><label>a' (Hz):</label><input type="number" id="input-a4" value="440"></div>
+      <div><label>α₁:</label><input type="number" id="param-a1" value="0.70" step="any"></div>
+      <div><label>α₂:</label><input type="number" id="param-a2" value="1.40" step="any"></div>
+      <div><label>α₃:</label><input type="number" id="param-a3" value="4.00" step="any"></div>
+      <div><label>β:</label><input type="number" id="param-beta" value="1.25" step="any"></div>
+      <div><label>ν:</label><input type="number" id="param-nyu" value="0.88" step="any"></div>
+      <div><label>v(f₀):</label><input type="number" id="param-v0" value="1.00" step="any"></div>
+    </div>
+  </details>
+</div>
+
+<!-- 下部：分割グラフ＆内訳パネル -->
+<div class="bottom-container">
+  <div class="graph-container">
+    <!-- 上段グラフ: [Z-x] または 2音間グラフ -->
+    <div class="chart-box" id="box-zx">
+      <div class="graph-header">
+        <span id="title-zx" style="color: #1d4ed8;">📊 [Z-x] 比較グラフ</span>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="chartZx"></canvas>
+      </div>
+    </div>
+
+    <!-- 下段グラフ: [x-x] グラフ -->
+    <div class="chart-box" id="box-xx">
+      <div class="graph-header">
+        <span id="title-xx" style="color: #059669;">📊 [x-x] 比較グラフ</span>
+      </div>
+      <div class="chart-wrapper">
+        <canvas id="chartXx"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 内訳表示サイドパネル -->
+  <div class="breakdown-panel" id="breakdown-panel">
+    <div class="breakdown-title">各セットの内訳詳細</div>
+    <div class="breakdown-list" id="breakdown-list"></div>
+  </div>
+</div>
+
+<script>
+  let currentMode = 'mnotes'; 
+
+  const PALETTE_ZX = [
+    '#1d4ed8', '#6366f1', '#8b5cf6', '#0284c7', '#0891b2', '#475569'
+  ];
+
+  const PALETTE_XX = [
+    '#059669', '#d97706', '#e11d48', '#65a30d', '#c026d3', '#d946ef'
+  ];
+
+  function parseHelmholtzToFreq(inputStr, baseA4 = 440) {
+    if (!inputStr) return null;
+    const str = inputStr.trim();
+    if (!str) return null;
+
+    const match = str.match(/^([A-Ga-g])([#b]?)([',]*)$|^([A-Ga-g])([',]*)([#b]?)$/);
+    if (!match) return null;
+
+    const letter = match[1] || match[4];
+    const accidental = match[2] || match[6] || '';
+    const octaveMarks = match[3] || match[5] || '';
+
+    const isUpper = (letter === letter.toUpperCase());
+    const baseLetterUpper = letter.toUpperCase();
+
+    const NOTE_MAP = { 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11 };
+    if (!(baseLetterUpper in NOTE_MAP)) return null;
+
+    let semitone = NOTE_MAP[baseLetterUpper];
+
+    if (accidental === '#') semitone += 1;
+    else if (accidental.toLowerCase() === 'b') semitone -= 1;
+
+    let octave = isUpper ? 2 : 3;
+
+    if (isUpper) {
+      const commaCount = (octaveMarks.match(/,/g) || []).length;
+      octave -= commaCount;
+    } else {
+      const apostropheCount = (octaveMarks.match(/'/g) || []).length;
+      octave += apostropheCount;
+    }
+
+    const midiNumber = (octave + 1) * 12 + semitone;
+    return { freq: baseA4 * Math.pow(2, (midiNumber - 69) / 12), midi: midiNumber };
+  }
+
+  function midiToHelmholtz(midi) {
+    const semitone = ((midi % 12) + 12) % 12;
+    const octave = Math.floor(midi / 12) - 1;
+    const names = ["c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"];
+    const baseName = names[semitone];
+
+    if (octave >= 3) {
+      return baseName + "'".repeat(octave - 3 + 1);
+    } else {
+      return baseName.toUpperCase() + (octave < 2 ? ",".repeat(2 - octave) : "");
+    }
+  }
+
+  function getChordNotes(rootStr, type) {
+    const parsed = parseHelmholtzToFreq(rootStr);
+    if (!parsed) return [];
+
+    const rootMidi = parsed.midi;
+    let intervals = [];
+
+    switch (type) {
+      case 'maj': intervals = [0, 4, 7]; break;
+      case 'min': intervals = [0, 3, 7]; break;
+      case 'dim': intervals = [0, 3, 6]; break;
+      case 'aug': intervals = [0, 4, 8]; break;
+    }
+
+    return intervals.map(i => midiToHelmholtz(rootMidi + i));
+  }
+
+  function calculateD(n, f, g, a1, a2, a3, beta, nyu, v0) {
+    if (!n || !f || !g || f <= 0 || g <= 0 || n <= 0) return null;
+
+    let totalSum = 0;
+
+    for (let i = 0; i < n; i++) {
+      const fi = f * (i + 1);
+      const v_fi = v0 * Math.pow(nyu, i);
+
+      for (let j = 0; j < n; j++) {
+        const gj = g * (j + 1);
+        const v_gj = v0 * Math.pow(nyu, j);
+
+        const lnRatio = Math.abs(Math.log(fi / gj));
+        const expLnRatio = Math.exp(lnRatio);
+        const x = 12 * Math.log2(expLnRatio);
+
+        const v_figj = v_fi * v_gj;
+
+        const term1 = Math.exp(-a1 * Math.pow(x, beta));
+        const term2 = Math.exp(-a2 * Math.pow(x, beta));
+
+        const d_ij = a3 * v_figj * (term1 - term2);
+        totalSum += d_ij;
+      }
+    }
+    return totalSum;
+  }
+
+  const PRESET_CHROMATIC = [
+    { noteF: "c'", noteG: "c'" }, { noteF: "c'", noteG: "c#'" },
+    { noteF: "c'", noteG: "d'" }, { noteF: "c'", noteG: "d#'" },
+    { noteF: "c'", noteG: "e'" }, { noteF: "c'", noteG: "f'" },
+    { noteF: "c'", noteG: "f#'" }, { noteF: "c'", noteG: "g'" },
+    { noteF: "c'", noteG: "g#'" }, { noteF: "c'", noteG: "a'" },
+    { noteF: "c'", noteG: "a#'" }, { noteF: "c'", noteG: "b'" }
+  ];
+
+  const PRESET_TRIAD = [
+    { noteF: "c'", noteG: "c'" }, { noteF: "c'", noteG: "e'" },
+    { noteF: "c'", noteG: "g'" }, { noteF: "c'", noteG: "b'" },
+    { noteF: "c'", noteG: "c''" }
+  ];
+
+  const PRESET_DIATONIC_SETS = [
+    { name: "CM",   center: "c'", notes: "c' e' g'" },
+    { name: "Dm",   center: "c'", notes: "d' f' a'" },
+    { name: "Em",   center: "c'", notes: "e' g' b'" },
+    { name: "FM",   center: "c'", notes: "f' a' c''" },
+    { name: "GM",   center: "c'", notes: "g' b' d''" },
+    { name: "Am",   center: "c'", notes: "a' c'' e''" },
+    { name: "Bdim", center: "c'", notes: "b' d'' f''" }
+  ];
+
+  let chartZx = null;
+  let chartXx = null;
+
+  function initCharts() {
+    const commonOptions = {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: { stacked: true, title: { display: true, text: 'セット名' } },
+        y: { stacked: true, beginAtZero: true, title: { display: true, text: 'd(f, g) の値' } }
+      },
+      plugins: {
+        legend: { display: true, position: 'bottom' },
+        tooltip: {
+          mode: 'nearest',
+          intersect: true,
+          callbacks: {
+            title: function(tooltipItems) {
+              const item = tooltipItems[0];
+              return `セット: ${item.label}`;
+            },
+            label: function(context) {
+              const dataset = context.dataset;
+              const val = context.parsed.y;
+              const idx = context.dataIndex;
+              
+              const pairStr = (dataset.details && dataset.details[idx]) ? dataset.details[idx] : null;
+
+              if (pairStr) {
+                return `【${pairStr}】: ${val.toFixed(3)}`;
+              } else {
+                return `【${dataset.label}】: ${val.toFixed(3)}`;
+              }
+            }
+          }
+        }
+      }
+    };
+
+    const ctxZx = document.getElementById('chartZx').getContext('2d');
+    chartZx = new Chart(ctxZx, {
+      type: 'bar',
+      data: { labels: [], datasets: [] },
+      options: JSON.parse(JSON.stringify(commonOptions))
+    });
+
+    const ctxXx = document.getElementById('chartXx').getContext('2d');
+    chartXx = new Chart(ctxXx, {
+      type: 'bar',
+      data: { labels: [], datasets: [] },
+      options: JSON.parse(JSON.stringify(commonOptions))
+    });
+  }
+
+  function createPairItem(pair = { noteF: "c'", noteG: "c'" }) {
+    const div = document.createElement('div');
+    div.className = 'pair-item';
+    div.innerHTML = `
+      <input type="text" class="input-note-f" value="${pair.noteF}">
+      <span>-</span>
+      <input type="text" class="input-note-g" value="${pair.noteG}">
+      <span class="res-val">-</span>
+      <button class="btn-del">×</button>
+    `;
+
+    div.querySelectorAll('input').forEach(input => input.addEventListener('input', updateCalculations));
+    div.querySelector('.btn-del').addEventListener('click', () => { div.remove(); updateCalculations(); });
+    return div;
+  }
+
+  function loadPairList(pairs) {
+    const container = document.getElementById('pairs-container');
+    container.innerHTML = '';
+    pairs.forEach(p => container.appendChild(createPairItem(p)));
+    updateCalculations();
+  }
+
+  function createSetRow(setName = "Set 1", centerNote = "c'", multiNotes = "c' e' g'") {
+    const div = document.createElement('div');
+    div.className = 'set-item-row';
+    div.innerHTML = `
+      <label>名:</label>
+      <input type="text" class="input-set-name" value="${setName}" style="width: 65px;">
+      <label>Z:</label>
+      <input type="text" class="input-set-center" value="${centerNote}" style="width: 40px; text-align: center;">
+      <label>構成音:</label>
+      <input type="text" class="input-set-notes" value="${multiNotes}" style="width: 170px;">
+      <div class="set-res-split">
+        <span class="val-zx" style="color: #1d4ed8;">[Z-x]: -</span>
+        <span class="val-xx" style="color: #059669;">[x-x]: -</span>
+      </div>
+      <button class="btn-del">×</button>
+    `;
+
+    div.querySelectorAll('input').forEach(input => input.addEventListener('input', updateCalculations));
+    div.querySelector('.btn-del').addEventListener('click', () => { div.remove(); updateCalculations(); });
+    return div;
+  }
+
+  function loadDiatonicPreset() {
+    const setsContainer = document.getElementById('sets-container');
+    setsContainer.innerHTML = '';
+    PRESET_DIATONIC_SETS.forEach(s => {
+      setsContainer.appendChild(createSetRow(s.name, s.center, s.notes));
+    });
+    updateCalculations();
+  }
+
+  function updateCalculations() {
+    if (!chartZx || !chartXx) return;
+
+    const inputN = document.getElementById('input-n-num');
+    let n = parseInt(inputN.value, 10) || 1;
+    if (n < 1) n = 1;
+    if (n > 30) n = 30;
+
+    const baseA4 = parseFloat(document.getElementById('input-a4').value) || 440;
+    const a1 = parseFloat(document.getElementById('param-a1').value);
+    const a2 = parseFloat(document.getElementById('param-a2').value);
+    const a3 = parseFloat(document.getElementById('param-a3').value);
+    const beta = parseFloat(document.getElementById('param-beta').value);
+    const nyu = parseFloat(document.getElementById('param-nyu').value);
+    const v0 = parseFloat(document.getElementById('param-v0').value);
+
+    const breakdownList = document.getElementById('breakdown-list');
+    breakdownList.innerHTML = '';
+
+    const boxXx = document.getElementById('box-xx');
+
+    if (currentMode === '2notes') {
+      boxXx.style.display = 'none';
+      document.getElementById('title-zx').textContent = `📊 音名ペアごとの d(f, g) 比較 (n = ${n})`;
+      document.getElementById('breakdown-panel').style.display = 'none';
+
+      const labels = [];
+      const values = [];
+      const details = [];
+
+      document.querySelectorAll('.pair-item').forEach(item => {
+        const noteF = item.querySelector('.input-note-f').value;
+        const noteG = item.querySelector('.input-note-g').value;
+        const resValSpan = item.querySelector('.res-val');
+
+        const pF = parseHelmholtzToFreq(noteF, baseA4);
+        const pG = parseHelmholtzToFreq(noteG, baseA4);
+
+        if (pF && pG) {
+          const val = calculateD(n, pF.freq, pG.freq, a1, a2, a3, beta, nyu, v0);
+          if (val !== null) {
+            resValSpan.textContent = val.toFixed(3);
+            const pairName = `${noteF.trim()} - ${noteG.trim()}`;
+            labels.push(pairName);
+            values.push(val);
+            details.push(pairName);
+          } else {
+            resValSpan.textContent = 'Err';
+          }
+        } else {
+          resValSpan.textContent = '?';
+        }
+      });
+
+      chartZx.options.scales.x.stacked = false;
+      chartZx.options.scales.y.stacked = false;
+      chartZx.data.labels = labels;
+      chartZx.data.datasets = [{
+        label: '2音間距離 d(f, g)',
+        data: values,
+        details: details,
+        backgroundColor: 'rgba(37, 99, 235, 0.75)',
+        borderColor: 'rgba(37, 99, 235, 1)',
+        borderWidth: 1
+      }];
+      chartZx.update();
+    } else {
+      boxXx.style.display = 'flex';
+      document.getElementById('breakdown-panel').style.display = 'flex';
+      document.getElementById('title-zx').textContent = `📊 [Z-x] (中心音 Z と各構成音 x の d) (n = ${n})`;
+      document.getElementById('title-xx').textContent = `📊 [x-x] (構成音 x 相互の d) (n = ${n})`;
+
+      const setRows = document.querySelectorAll('.set-item-row');
+      const setNames = [];
+      const calculatedSetsData = [];
+
+      let maxNotesCount = 0;
+      let maxPairKeys = new Set();
+
+      setRows.forEach((row, setIndex) => {
+        const setName = row.querySelector('.input-set-name').value.trim() || `Set ${setIndex + 1}`;
+        const centerStr = row.querySelector('.input-set-center').value.trim();
+        const notesStr = row.querySelector('.input-set-notes').value.trim();
+        const valZxSpan = row.querySelector('.val-zx');
+        const valXxSpan = row.querySelector('.val-xx');
+
+        setNames.push(setName);
+
+        const notesArray = notesStr.split(/\s+/).filter(s => s.length > 0);
+        if (notesArray.length > maxNotesCount) maxNotesCount = notesArray.length;
+
+        const pZ = parseHelmholtzToFreq(centerStr, baseA4);
+
+        let sumZx = 0;
+        let sumXx = 0;
+
+        const listZx = [];
+        const listXx = [];
+
+        if (pZ && notesArray.length > 0) {
+          // [Z-x]
+          notesArray.forEach((noteX) => {
+            const pX = parseHelmholtzToFreq(noteX, baseA4);
+            let val = 0;
+            if (pX) {
+              const res = calculateD(n, pZ.freq, pX.freq, a1, a2, a3, beta, nyu, v0);
+              if (res !== null) val = res;
+            }
+            listZx.push({ noteStr: noteX, pairName: `${centerStr} - ${noteX}`, val: val });
+            sumZx += val;
+          });
+
+          // [x-x]
+          for (let i = 0; i < notesArray.length; i++) {
+            for (let j = i + 1; j < notesArray.length; j++) {
+              const pairKey = `${i + 1}-${j + 1}音目`;
+              maxPairKeys.add(pairKey);
+
+              const pX1 = parseHelmholtzToFreq(notesArray[i], baseA4);
+              const pX2 = parseHelmholtzToFreq(notesArray[j], baseA4);
+              let val = 0;
+              if (pX1 && pX2) {
+                const res = calculateD(n, pX1.freq, pX2.freq, a1, a2, a3, beta, nyu, v0);
+                if (res !== null) val = res;
+              }
+              listXx.push({
+                pairName: `${notesArray[i]} - ${notesArray[j]}`,
+                pairKey: pairKey,
+                val: val
+              });
+              sumXx += val;
+            }
+          }
+
+          valZxSpan.textContent = `[Z-x]: ${sumZx.toFixed(3)}`;
+          valXxSpan.textContent = `[x-x]: ${sumXx.toFixed(3)}`;
+        } else {
+          valZxSpan.textContent = '[Z-x]: Err';
+          valXxSpan.textContent = '[x-x]: Err';
+        }
+
+        calculatedSetsData.push({
+          setName,
+          centerStr,
+          listZx,
+          listXx,
+          sumZx,
+          sumXx,
+          totalSum: sumZx + sumXx
+        });
+      });
+
+      // 1. [Z-x] データセット構築
+      const datasetsZx = [];
+      for (let pos = 0; pos < maxNotesCount; pos++) {
+        datasetsZx.push({
+          label: `Z - x${pos + 1}`,
+          data: calculatedSetsData.map(s => (s.listZx[pos] ? s.listZx[pos].val : 0)),
+          details: calculatedSetsData.map(s => (s.listZx[pos] ? s.listZx[pos].pairName : '')),
+          backgroundColor: PALETTE_ZX[pos % PALETTE_ZX.length],
+          borderWidth: 1
+        });
+      }
+
+      // 2. [x-x] データセット構築
+      const sortedPairKeys = Array.from(maxPairKeys).sort();
+      const datasetsXx = sortedPairKeys.map((pairKey, idx) => ({
+        label: `x-x ペア ${idx + 1}`,
+        data: calculatedSetsData.map(s => {
+          const item = s.listXx.find(x => x.pairKey === pairKey);
+          return item ? item.val : 0;
+        }),
+        details: calculatedSetsData.map(s => {
+          const item = s.listXx.find(x => x.pairKey === pairKey);
+          return item ? item.pairName : '';
+        }),
+        backgroundColor: PALETTE_XX[idx % PALETTE_XX.length],
+        borderWidth: 1
+      }));
+
+      // 上段グラフ ([Z-x]) 更新
+      chartZx.options.scales.x.stacked = true;
+      chartZx.options.scales.y.stacked = true;
+      chartZx.data.labels = setNames;
+      chartZx.data.datasets = datasetsZx;
+      chartZx.update();
+
+      // 下段グラフ ([x-x]) 更新
+      chartXx.options.scales.x.stacked = true;
+      chartXx.options.scales.y.stacked = true;
+      chartXx.data.labels = setNames;
+      chartXx.data.datasets = datasetsXx;
+      chartXx.update();
+
+      // 内訳表示サイドパネル
+      calculatedSetsData.forEach(setData => {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'set-breakdown-group';
+
+        let innerHTML = `
+          <div class="set-breakdown-header">
+            <span>${setData.setName}</span>
+            <b>全和: ${setData.totalSum.toFixed(3)}</b>
+          </div>
+        `;
+
+        innerHTML += `<div class="breakdown-section-title zx">■ [Z-x] (計: ${setData.sumZx.toFixed(3)})</div>`;
+        setData.listZx.forEach((item) => {
+          innerHTML += `
+            <div class="breakdown-item center-pair">
+              <span>【${item.pairName}】:</span>
+              <b>${item.val.toFixed(3)}</b>
+            </div>
+          `;
+        });
+
+        innerHTML += `<div class="breakdown-section-title xx">■ [x-x] (計: ${setData.sumXx.toFixed(3)})</div>`;
+        setData.listXx.forEach(item => {
+          innerHTML += `
+            <div class="breakdown-item pair-xx">
+              <span>【${item.pairName}】:</span>
+              <b>${item.val.toFixed(3)}</b>
+            </div>
+          `;
+        });
+
+        groupDiv.innerHTML = innerHTML;
+        breakdownList.appendChild(groupDiv);
+      });
+    }
+  }
+
+  window.addEventListener('load', () => {
+    initCharts();
+    loadPairList(PRESET_CHROMATIC);
+    loadDiatonicPreset();
+
+    const inputN = document.getElementById('input-n-num');
+    inputN.addEventListener('input', updateCalculations);
+
+    document.getElementById('btn-n-down').addEventListener('click', () => {
+      let val = parseInt(inputN.value, 10) || 1;
+      if (val > 1) { inputN.value = val - 1; updateCalculations(); }
+    });
+
+    document.getElementById('btn-n-up').addEventListener('click', () => {
+      let val = parseInt(inputN.value, 10) || 1;
+      if (val < 30) { inputN.value = val + 1; updateCalculations(); }
+    });
+
+    const tab2Notes = document.getElementById('tab-2notes');
+    const tabMNotes = document.getElementById('tab-mnotes');
+    const content2Notes = document.getElementById('content-2notes');
+    const contentMNotes = document.getElementById('content-mnotes');
+
+    tab2Notes.addEventListener('click', () => {
+      currentMode = '2notes';
+      tab2Notes.classList.add('active');
+      tabMNotes.classList.remove('active');
+      content2Notes.classList.add('active');
+      contentMNotes.classList.remove('active');
+      updateCalculations();
+    });
+
+    tabMNotes.addEventListener('click', () => {
+      currentMode = 'mnotes';
+      tabMNotes.classList.add('active');
+      tab2Notes.classList.remove('active');
+      contentMNotes.classList.add('active');
+      content2Notes.classList.remove('active');
+      updateCalculations();
+    });
+
+    document.getElementById('btn-preset-chromatic').addEventListener('click', () => loadPairList(PRESET_CHROMATIC));
+    document.getElementById('btn-preset-triad').addEventListener('click', () => loadPairList(PRESET_TRIAD));
+    document.getElementById('btn-add-pair').addEventListener('click', () => {
+      document.getElementById('pairs-container').appendChild(createPairItem({ noteF: "c'", noteG: "g'" }));
+      updateCalculations();
+    });
+    document.getElementById('btn-clear-pairs').addEventListener('click', () => loadPairList([]));
+
+    document.getElementById('btn-preset-diatonic').addEventListener('click', loadDiatonicPreset);
+
+    document.getElementById('btn-add-preset-set').addEventListener('click', () => {
+      const setsContainer = document.getElementById('sets-container');
+      const rootStr = document.getElementById('preset-root').value;
+      const typeStr = document.getElementById('preset-type').value;
+      const notes = getChordNotes(rootStr, typeStr).join(' ');
+      const name = `${rootStr.toUpperCase().replace("'", "")}${typeStr}`;
+      setsContainer.appendChild(createSetRow(name, rootStr, notes));
+      updateCalculations();
+    });
+
+    document.getElementById('btn-add-empty-set').addEventListener('click', () => {
+      const setsContainer = document.getElementById('sets-container');
+      const count = setsContainer.querySelectorAll('.set-item-row').length + 1;
+      setsContainer.appendChild(createSetRow(`Set ${count}`, "c'", "c' e' g'"));
+      updateCalculations();
+    });
+
+    document.getElementById('btn-clear-sets').addEventListener('click', () => {
+      document.getElementById('sets-container').innerHTML = '';
+      updateCalculations();
+    });
+
+    document.querySelectorAll('.params-grid input').forEach(input => {
+      input.addEventListener('input', updateCalculations);
+    });
+  });
+</script>
+</body>
+</html
